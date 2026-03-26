@@ -266,14 +266,21 @@ int main(int argc, char ** argv) {
 
     LOG_DBG("n_ctx: %d, add_bos: %d\n", n_ctx, add_bos);
 
+    const bool chat_enable_thinking = common_chat_resolve_enable_thinking(params, chat_templates.get());
+    if (params.conversation_mode && params.enable_chat_template && params.use_jinja) {
+        LOG_INF("%s: enable_thinking (chat template) = %d\n", __func__, (int) chat_enable_thinking);
+    }
+
     std::vector<llama_token> embd_inp;
 
     bool waiting_for_first_input = false;
-    auto chat_add_and_format = [&chat_msgs, &chat_templates](const std::string & role, const std::string & content) {
+    auto chat_add_and_format = [&chat_msgs, &chat_templates, &params, chat_enable_thinking](const std::string & role, const std::string & content) {
         common_chat_msg new_msg;
         new_msg.role = role;
         new_msg.content = content;
-        auto formatted = common_chat_format_single(chat_templates.get(), chat_msgs, new_msg, role == "user", g_params->use_jinja);
+        auto formatted = common_chat_format_single(
+            chat_templates.get(), chat_msgs, new_msg, role == "user", g_params->use_jinja,
+            params.default_template_kwargs, chat_enable_thinking);
         chat_msgs.push_back(new_msg);
         LOG_DBG("formatted: '%s'\n", formatted.c_str());
         return formatted;
@@ -299,6 +306,9 @@ int main(int argc, char ** argv) {
                 inputs.use_jinja = g_params->use_jinja;
                 inputs.messages = chat_msgs;
                 inputs.add_generation_prompt = !params.prompt.empty();
+                inputs.chat_template_kwargs = params.default_template_kwargs;
+                inputs.enable_thinking = chat_enable_thinking;
+                inputs.reasoning_format = params.reasoning_format;
 
                 prompt = common_chat_templates_apply(chat_templates.get(), inputs).prompt;
             }

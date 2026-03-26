@@ -179,6 +179,23 @@ bool common_chat_templates_support_enable_thinking(const common_chat_templates *
     return rendered_no_thinking.prompt != rendered_with_thinking.prompt;
 }
 
+bool common_chat_resolve_enable_thinking(
+    const common_params & params,
+    const common_chat_templates * tmpls) {
+    bool base = params.use_jinja && params.reasoning_budget != 0 && common_chat_templates_support_enable_thinking(tmpls);
+    auto it = params.default_template_kwargs.find("enable_thinking");
+    if (it != params.default_template_kwargs.end()) {
+        const std::string & v = it->second;
+        if (v == "true") {
+            return true;
+        }
+        if (v == "false") {
+            return false;
+        }
+    }
+    return base;
+}
+
 template <>
 std::vector<common_chat_msg> common_chat_msgs_parse_oaicompat(const json & messages) {
     std::vector<common_chat_msg> msgs;
@@ -462,12 +479,16 @@ std::string common_chat_format_single(
         const std::vector<common_chat_msg> & past_msg,
         const common_chat_msg & new_msg,
         bool add_ass,
-        bool use_jinja) {
+        bool use_jinja,
+        const std::map<std::string, std::string> & chat_template_kwargs,
+        bool enable_thinking) {
 
     common_chat_templates_inputs inputs;
     inputs.use_jinja = use_jinja;
     inputs.add_bos = tmpls->add_bos;
     inputs.add_eos = tmpls->add_eos;
+    inputs.chat_template_kwargs = chat_template_kwargs;
+    inputs.enable_thinking = enable_thinking;
 
     std::string fmt_past_msg;
     if (!past_msg.empty()) {
@@ -487,6 +508,16 @@ std::string common_chat_format_single(
     // get the diff part
     ss << fmt_new_msg.substr(fmt_past_msg.size(), fmt_new_msg.size() - fmt_past_msg.size());
     return ss.str();
+}
+
+std::string common_chat_format_single(
+        const struct common_chat_templates * tmpls,
+        const std::vector<common_chat_msg> & past_msg,
+        const common_chat_msg & new_msg,
+        bool add_ass,
+        bool use_jinja) {
+    static const std::map<std::string, std::string> empty_kwargs;
+    return common_chat_format_single(tmpls, past_msg, new_msg, add_ass, use_jinja, empty_kwargs, true);
 }
 
 std::string common_chat_format_example(const struct common_chat_templates * tmpls, bool use_jinja, const std::map<std::string, std::string> & chat_template_kwargs) {

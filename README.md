@@ -96,6 +96,8 @@ For more detailed build instructions, see [docs/build.md](docs/build.md).
 ./build/bin/llama-cli -m model.gguf -ngl 99 -c 4096 -p "Explain quantum computing in simple terms"
 ```
 
+For **Qwen3 / Qwen3.5** GGUFs, you can use the helper script [`scripts/qwen3-llama-run.sh`](scripts/qwen3-llama-run.sh) to toggle chat-template **thinking** mode and forward extra `llama-cli` or `llama-bench` flags after `--`. See [docs/qwen3-llama-run.md](docs/qwen3-llama-run.md) for options, examples, and how it maps to `--jinja` and `--reasoning-budget`.
+
 
 ## Supported Platforms
 

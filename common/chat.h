@@ -196,6 +196,15 @@ std::string common_chat_format_single(
         bool add_ass,
         bool use_jinja);
 
+std::string common_chat_format_single(
+        const struct common_chat_templates * tmpls,
+        const std::vector<common_chat_msg> & past_msg,
+        const common_chat_msg & new_msg,
+        bool add_ass,
+        bool use_jinja,
+        const std::map<std::string, std::string> & chat_template_kwargs,
+        bool enable_thinking);
+
 // Returns an example of formatted chat
 std::string common_chat_format_example(
     const struct common_chat_templates * tmpls,
@@ -210,6 +219,13 @@ common_chat_msg           common_chat_parse(const std::string & input, bool is_p
 common_chat_tool_choice common_chat_tool_choice_parse_oaicompat(const std::string & tool_choice);
 
 bool common_chat_templates_support_enable_thinking(const common_chat_templates * chat_templates);
+
+// Resolves whether the Jinja chat template should open the thinking channel (Qwen3 / Qwen3.5, etc.):
+// base: use_jinja && reasoning_budget != 0 && template supports enable_thinking;
+// override: default_template_kwargs["enable_thinking"] == "true" or "false" (JSON booleans from --chat-template-kwargs).
+bool common_chat_resolve_enable_thinking(
+    const common_params & params,
+    const common_chat_templates * tmpls);
 
 // Parses a JSON array of messages in OpenAI's chat completion API format.
 // T can be std::string containing JSON or nlohmann::ordered_json
