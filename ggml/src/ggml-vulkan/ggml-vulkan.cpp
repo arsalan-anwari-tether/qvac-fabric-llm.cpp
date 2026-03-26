@@ -5098,12 +5098,18 @@ static vk_device ggml_vk_get_device(size_t idx) {
 #endif
         device->name = GGML_VK_NAME + std::to_string(idx);
 
-        device_create_info = {
+        // Counts + pointers: the ArrayProxy constructor is unavailable when
+        // Vulkan-Hpp is built with VULKAN_HPP_DISABLE_ENHANCED_MODE (e.g. Termux).
+        device_create_info = vk::DeviceCreateInfo(
             vk::DeviceCreateFlags(),
-            device_queue_create_infos,
-            {},
-            device_extensions
-        };
+            static_cast<uint32_t>(device_queue_create_infos.size()),
+            device_queue_create_infos.data(),
+            0u,
+            nullptr,
+            static_cast<uint32_t>(device_extensions.size()),
+            device_extensions.data(),
+            nullptr,
+            nullptr);
         device_create_info.setPNext(&device_features2);
         device->device = device->physical_device.createDevice(device_create_info);
 
