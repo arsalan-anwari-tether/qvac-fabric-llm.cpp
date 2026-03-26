@@ -136,3 +136,7 @@ poetry.toml
 /.windsurf/
 # emscripten
 a.out.*
+
+
+results/
+logs/
