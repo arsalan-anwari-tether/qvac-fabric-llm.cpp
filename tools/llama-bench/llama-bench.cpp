@@ -1309,6 +1309,9 @@ struct test {
     int                      n_depth;
     std::string              test_time;
     std::vector<uint64_t>    samples_ns;
+    // Time-to-first-token (ns): wall time from start of timed section until first decode completes.
+    // Empty when n_gen == 0 (prompt-only / embeddings-style runs with no generation).
+    std::vector<uint64_t>    samples_ttf_ns;
 
     test(const cmd_params_instance & inst, const llama_model * lmodel, const llama_context * ctx) :
         cpu_info(get_cpu_info()),
@@ -1367,6 +1370,20 @@ struct test {
     double avg_ts() const { return ::avg(get_ts()); }
 
     double stdev_ts() const { return ::stdev(get_ts()); }
+
+    uint64_t avg_ttf_ns() const {
+        if (samples_ttf_ns.empty()) {
+            return 0;
+        }
+        return ::avg(samples_ttf_ns);
+    }
+
+    uint64_t stdev_ttf_ns() const {
+        if (samples_ttf_ns.empty()) {
+            return 0;
+        }
+        return ::stdev(samples_ttf_ns);
+    }
 
     static std::string get_backend() {
         std::vector<std::string> backends;
@@ -1606,6 +1623,15 @@ struct json_printer : public printer {
         fprintf(fout, "  {\n");
         print_fields(test::get_fields(), t.get_values());
         fprintf(fout, "    \"samples_ns\": [ %s ],\n", join(t.samples_ns, ", ").c_str());
+        if (t.samples_ttf_ns.empty()) {
+            fprintf(fout, "    \"samples_ttf_ns\": [],\n");
+            fprintf(fout, "    \"avg_ttf_ns\": null,\n");
+            fprintf(fout, "    \"stddev_ttf_ns\": null,\n");
+        } else {
+            fprintf(fout, "    \"samples_ttf_ns\": [ %s ],\n", join(t.samples_ttf_ns, ", ").c_str());
+            fprintf(fout, "    \"avg_ttf_ns\": %" PRIu64 ",\n", t.avg_ttf_ns());
+            fprintf(fout, "    \"stddev_ttf_ns\": %" PRIu64 ",\n", t.stdev_ttf_ns());
+        }
         fprintf(fout, "    \"samples_ts\": [ %s ]\n", join(t.get_ts(), ", ").c_str());
         fprintf(fout, "  }");
         fflush(fout);
@@ -1626,6 +1652,15 @@ struct jsonl_printer : public printer {
         fprintf(fout, "{");
         print_fields(test::get_fields(), t.get_values());
         fprintf(fout, "\"samples_ns\": [ %s ],", join(t.samples_ns, ", ").c_str());
+        if (t.samples_ttf_ns.empty()) {
+            fprintf(fout, "\"samples_ttf_ns\": [],");
+            fprintf(fout, "\"avg_ttf_ns\": null,");
+            fprintf(fout, "\"stddev_ttf_ns\": null,");
+        } else {
+            fprintf(fout, "\"samples_ttf_ns\": [ %s ],", join(t.samples_ttf_ns, ", ").c_str());
+            fprintf(fout, "\"avg_ttf_ns\": %" PRIu64 ",", t.avg_ttf_ns());
+            fprintf(fout, "\"stddev_ttf_ns\": %" PRIu64 ",", t.stdev_ttf_ns());
+        }
         fprintf(fout, "\"samples_ts\": [ %s ]", join(t.get_ts(), ", ").c_str());
         fprintf(fout, "}\n");
         fflush(fout);
@@ -1954,9 +1989,25 @@ static bool test_prompt(llama_context * ctx, int n_prompt, int n_batch, int n_th
     return true;
 }
 
-static bool test_gen(llama_context * ctx, int n_gen, int n_threads) {
+// Single autoregressive decode step (same semantics as one iteration of the former test_gen loop).
+static bool test_gen_decode_one(llama_context * ctx, llama_token * token, int n_threads) {
     llama_set_n_threads(ctx, n_threads, n_threads);
 
+    const llama_model * model   = llama_get_model(ctx);
+    const llama_vocab * vocab   = llama_model_get_vocab(model);
+    const int32_t       n_vocab = llama_vocab_n_tokens(vocab);
+
+    int res = llama_decode(ctx, llama_batch_get_one(token, 1));
+    if (res != 0) {
+        fprintf(stderr, "%s: failed to decode generation batch, res = %d\n", __func__, res);
+        return false;
+    }
+    llama_synchronize(ctx);
+    *token = std::rand() % n_vocab;
+    return true;
+}
+
+static bool test_gen(llama_context * ctx, int n_gen, int n_threads) {
     const llama_model * model   = llama_get_model(ctx);
     const llama_vocab * vocab   = llama_model_get_vocab(model);
     const int32_t       n_vocab = llama_vocab_n_tokens(vocab);
@@ -1964,13 +2015,9 @@ static bool test_gen(llama_context * ctx, int n_gen, int n_threads) {
     llama_token token = llama_vocab_get_add_bos(vocab) ? llama_vocab_bos(vocab) : std::rand() % n_vocab;
 
     for (int i = 0; i < n_gen; i++) {
-        int res = llama_decode(ctx, llama_batch_get_one(&token, 1));
-        if (res != 0) {
-            fprintf(stderr, "%s: failed to decode generation batch, res = %d\n", __func__, res);
+        if (!test_gen_decode_one(ctx, &token, n_threads)) {
             return false;
         }
-        llama_synchronize(ctx);
-        token = std::rand() % n_vocab;
     }
     return true;
 }
@@ -2196,10 +2243,26 @@ int main(int argc, char ** argv) {
                     fprintf(stderr, "llama-bench: benchmark %d/%zu: generation run %d/%d\n", params_idx, params_count,
                             i + 1, params.reps);
                 }
-                bool res = test_gen(ctx, t.n_gen, t.n_threads);
+                const llama_model * model   = llama_get_model(ctx);
+                const llama_vocab * vocab   = llama_model_get_vocab(model);
+                const int32_t       n_vocab = llama_vocab_n_tokens(vocab);
+
+                llama_token token = llama_vocab_get_add_bos(vocab) ? llama_vocab_bos(vocab) : std::rand() % n_vocab;
+
+                bool res = test_gen_decode_one(ctx, &token, t.n_threads);
                 if (!res) {
                     fprintf(stderr, "%s: error: failed to run gen\n", __func__);
                     exit(1);
+                }
+                const uint64_t after_first = get_time_ns();
+                t.samples_ttf_ns.push_back(after_first - t_start);
+
+                for (int j = 1; j < t.n_gen; j++) {
+                    res = test_gen_decode_one(ctx, &token, t.n_threads);
+                    if (!res) {
+                        fprintf(stderr, "%s: error: failed to run gen\n", __func__);
+                        exit(1);
+                    }
                 }
             }
 

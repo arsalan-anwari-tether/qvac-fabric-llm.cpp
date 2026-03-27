@@ -286,6 +286,7 @@ $ ./llama-bench -o json
 ]
 ```
 
+For `-o json` and `-o jsonl`, when `n_gen > 0`, the output includes **time-to-first-token (TTF)** in nanoseconds: `samples_ttf_ns` (one value per repetition), plus `avg_ttf_ns` and `stddev_ttf_ns`. TTF is wall time from the start of the timed section until the first decode finishes (prefill plus first synthetic decode step). When `n_gen == 0`, `samples_ttf_ns` is `[]` and `avg_ttf_ns` / `stddev_ttf_ns` are JSON `null`. Tokenization and sampling are excluded, like other llama-bench timings.
 
 ### JSONL
 

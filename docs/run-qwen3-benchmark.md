@@ -1,9 +1,21 @@
 # Batch CPU vs Vulkan benchmarks (`run_qwen3_benchmark.sh`)
 
-The script [`scripts/run_qwen3_benchmark.sh`](../scripts/run_qwen3_benchmark.sh) runs [`llama-bench`](../tools/llama-bench/README.md) once per GGUF file in a directory: **CPU** (`-ngl 0`) and **GPU offload** (`-ngl 999`, typically Vulkan on builds that use it). Each run writes **JSON** (`-o json`) to a file named from the model filename:
+The script [`scripts/run_qwen3_benchmark.sh`](../scripts/run_qwen3_benchmark.sh) runs [`llama-bench`](../tools/llama-bench/README.md) once per GGUF file in a directory: **CPU** (`-ngl 0`) and **GPU offload** (`-ngl 999`, typically Vulkan on builds that use it). It also runs [`llama-cli`](../tools/main/README.md) logic prompts (thinking and non-thinking) and writes Markdown reports.
 
-- `<stem>_cpu.json` — all inference on CPU
-- `<stem>_vulkan.json` — layers offloaded to the GPU (high `-ngl`); the label reflects the usual goal (compare against CPU); the actual backend follows your binary and environment
+By default, the logic benchmark uses the same fixed prompt set for both thinking and non-thinking runs. The default `llama-cli` generation limits are `-n 1024` for thinking and `-n 512` for non-thinking. The default logic-only sampling flags are:
+
+```bash
+--temp 0.5 --top-k 20 --top-p 0.9 --min-p 0 --repeat-penalty 1.10 --presence-penalty 0.3
+```
+
+You can override these defaults with `LOGIC_N_THINK`, `LOGIC_N_NO_THINK`, and `LOGIC_CLI_EXTRA`.
+
+Under **`--output-dir`** (default: same as `--input-dir`), it creates:
+
+- **`inference/`** — `llama-bench` JSON (`-o json`) per file:
+  - `<stem>_cpu.json` — all inference on CPU
+  - `<stem>_vulkan.json` — layers offloaded to the GPU (high `-ngl`); the label reflects the usual goal (compare against CPU); the actual backend follows your binary and environment
+- **`logic/`** — one Markdown file per backend and thinking mode: `<stem>_{cpu|vulkan}_{think|no_think}.md`
 
 `<stem>` is the GGUF filename without the `.gguf` suffix (e.g. `Qwen3-8B-Q4_K_M_cpu.json`).
 
@@ -11,18 +23,17 @@ The script [`scripts/run_qwen3_benchmark.sh`](../scripts/run_qwen3_benchmark.sh)
 
 The script resolves the repository root from its own path and defaults to:
 
-`build/bin/llama-bench`
-
-(i.e. `<repo>/build/bin/llama-bench`). Override with the **`LLAMA_BENCH`** environment variable if the binary lives elsewhere.
+- `build/bin/llama-bench` — override with **`LLAMA_BENCH`**
+- `build/bin/llama-cli` — override with **`LLAMA_CLI`**
 
 ## Usage
 
 ```bash
-./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/ggufs [--out-dir=/path/to/results] -- [extra llama-bench arguments]
+./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/ggufs [--output-dir=/path/to/results] -- [extra llama-bench arguments]
 ```
 
 - **`--input-dir`** — Required. Directory containing `*.gguf` files (non-recursive; only the top level of that directory).
-- **`--out-dir`** — Optional. Directory for the JSON result files; defaults to the same directory as `--input-dir`. **`--output-dir`** is an alias (same behavior).
+- **`--output-dir`** — Optional. Directory for **`inference/`** and **`logic/`**; defaults to the same path as **`--input-dir`**.
 - **`--`** — Everything after `--` is passed through to `llama-bench`. The script sets **`-m`** for each file and appends **`-ngl`** and **`-o json`** after your extras so the benchmark mode and JSON output stay consistent. Do not add another **`-m`** or **`-o`** after `--` unless you intend to override (the last flag wins).
 
 Example with extra bench flags:
@@ -58,7 +69,7 @@ nohup ./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf -- -p 512 -n 12
 echo $!   # PID to remember for kill or monitoring
 ```
 
-You can **`tail -f bench.log`** in another session to watch status. JSON results still go to the paths derived from **`--out-dir`** (or **`--output-dir`**) / **`--input-dir`**; the log is for messages and any errors from the shell or binary.
+You can **`tail -f bench.log`** in another session to watch status. JSON and Markdown results go under **`--output-dir`** (or **`--input-dir`** if you omitted **`--output-dir`**); the log is for messages and any errors from the shell or binary.
 
 ### Termux: keep the device awake (`termux-wake-lock`)
 
