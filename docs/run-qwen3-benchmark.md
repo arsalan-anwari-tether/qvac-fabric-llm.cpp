@@ -1,23 +1,30 @@
 # Batch CPU vs Vulkan benchmarks (`run_qwen3_benchmark.sh`)
 
-The script [`scripts/run_qwen3_benchmark.sh`](../scripts/run_qwen3_benchmark.sh) runs [`llama-bench`](../tools/llama-bench/README.md) once per GGUF file in a directory: **CPU** (`-ngl 0`) and **GPU offload** (`-ngl 999`, typically Vulkan on builds that use it). It also runs [`llama-cli`](../tools/main/README.md) logic prompts (thinking and non-thinking) and writes Markdown reports.
+The script [`scripts/run_qwen3_benchmark.sh`](../scripts/run_qwen3_benchmark.sh) runs Qwen3 benchmark batches over every `*.gguf` file in a directory. It supports:
 
-By default, the logic benchmark uses the same fixed prompt set for both thinking and non-thinking runs. The default `llama-cli` generation limits are `-n 1024` for thinking and `-n 512` for non-thinking. The default logic-only sampling flags are:
+- **Inference** via [`llama-bench`](../tools/llama-bench/README.md)
+- **Logic** prompt runs via [`llama-cli`](../tools/main/README.md)
+- **Mode selection** via `--bench-mode={all|inference|logic}`
 
-```bash
---temp 0.5 --top-k 20 --top-p 0.9 --min-p 0 --repeat-penalty 1.10 --presence-penalty 0.3
-```
+For each model, the script compares:
 
-You can override these defaults with `LOGIC_N_THINK`, `LOGIC_N_NO_THINK`, and `LOGIC_CLI_EXTRA`.
+- **CPU-only**: `--device none -ngl 0`
+- **GPU offload**: `-ngl 999` (typically Vulkan on builds that use it)
 
-Under **`--output-dir`** (default: same as `--input-dir`), it creates:
+The CPU mode is now a true CPU-only run because it uses `--device none`, not just `-ngl 0`.
 
-- **`inference/`** — `llama-bench` JSON (`-o json`) per file:
-  - `<stem>_cpu.json` — all inference on CPU
-  - `<stem>_vulkan.json` — layers offloaded to the GPU (high `-ngl`); the label reflects the usual goal (compare against CPU); the actual backend follows your binary and environment
-- **`logic/`** — one Markdown file per backend and thinking mode: `<stem>_{cpu|vulkan}_{think|no_think}.md`
+## Output layout
 
-`<stem>` is the GGUF filename without the `.gguf` suffix (e.g. `Qwen3-8B-Q4_K_M_cpu.json`).
+Under **`--output-dir`** (default: same as `--input-dir`), the script creates one subdirectory per model:
+
+- **`inference/<model>/cpu.json`**
+- **`inference/<model>/vulkan.json`**
+- **`logic/<model>/cpu_think.md`**
+- **`logic/<model>/cpu_no_think.md`**
+- **`logic/<model>/vulkan_think.md`**
+- **`logic/<model>/vulkan_no_think.md`**
+
+`<model>` is the GGUF filename without the `.gguf` suffix, for example `Qwen3-1.7B-Q4_K_M`.
 
 ## Expected binary location
 
@@ -29,17 +36,104 @@ The script resolves the repository root from its own path and defaults to:
 ## Usage
 
 ```bash
-./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/ggufs [--output-dir=/path/to/results] -- [extra llama-bench arguments]
+./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/ggufs [--output-dir=/path/to/results] [--bench-mode=all|inference|logic] -- [extra llama-bench arguments]
 ```
 
 - **`--input-dir`** — Required. Directory containing `*.gguf` files (non-recursive; only the top level of that directory).
 - **`--output-dir`** — Optional. Directory for **`inference/`** and **`logic/`**; defaults to the same path as **`--input-dir`**.
-- **`--`** — Everything after `--` is passed through to `llama-bench`. The script sets **`-m`** for each file and appends **`-ngl`** and **`-o json`** after your extras so the benchmark mode and JSON output stay consistent. Do not add another **`-m`** or **`-o`** after `--` unless you intend to override (the last flag wins).
+- **`--bench-mode`** — Select which parts to run:
+  - `all` — run both inference and logic
+  - `inference` — run only `llama-bench`
+  - `logic` — run only `llama-cli`
+- **`--`** — Everything after `--` is passed through to `llama-bench` only. The script sets **`-m`**, the CPU/GPU device flags, and **`-o json`** itself so those stay consistent. In `--bench-mode=logic`, arguments after `--` are accepted but unused.
 
-Example with extra bench flags:
+## Benchmark defaults
+
+### Inference defaults
+
+The script uses these `llama-bench` defaults unless you override them via environment variables:
+
+- `BENCH_P=256`
+- `BENCH_N=64`
+- `BENCH_R=2`
+
+`llama-bench` upstream defaults are larger (`-p 512 -n 128 -r 5`), so this script is intentionally faster by default.
+
+### Logic defaults
+
+The logic benchmark uses the same fixed prompt set for both modes, but it now has separate default sampling flags for thinking and non-thinking runs.
+
+- **Thinking**
+
+```bash
+--temp 0.5 --top-k 20 --top-p 0.9 --min-p 0 --repeat-penalty 1.10 --presence-penalty 0.3
+```
+
+- **Non-thinking**
+
+```bash
+--temp 0.2 --top-k 20 --top-p 0.9 --min-p 0 --repeat-penalty 1.05 --presence-penalty 0.0
+```
+
+The default generation limits are:
+
+- `LOGIC_N_THINK=512`
+- `LOGIC_N_NO_THINK=512`
+- `LOGIC_TIMEOUT_SEC=300`
+
+Each logic question is wrapped with the shell `timeout` command. If a run exceeds `LOGIC_TIMEOUT_SEC`, the script terminates that `llama-cli` process, records the partial stdout that was produced so far, and then continues to the next question.
+
+You can override the sampling flags with:
+
+- `LOGIC_CLI_EXTRA_THINK`
+- `LOGIC_CLI_EXTRA_NO_THINK`
+
+For backward compatibility, `LOGIC_CLI_EXTRA` is still accepted as a shared fallback for both modes if the per-mode variables are not set.
+
+## Examples
+
+Run everything with defaults:
+
+```bash
+./scripts/run_qwen3_benchmark.sh --input-dir="$HOME/models/qwen3-gguf"
+```
+
+Run only inference so you can iterate faster on throughput:
 
 ```bash
 ./scripts/run_qwen3_benchmark.sh --input-dir="$HOME/models/qwen3-gguf" -- -p 512 -n 128 -r 3
+```
+
+Run inference only with explicit mode selection:
+
+```bash
+./scripts/run_qwen3_benchmark.sh --input-dir="$HOME/models/qwen3-gguf" --bench-mode=inference -- -p 512 -n 128 -r 3
+```
+
+Run only logic prompts:
+
+```bash
+./scripts/run_qwen3_benchmark.sh --input-dir="$HOME/models/qwen3-gguf" --bench-mode=logic
+```
+
+Send output to a separate results directory:
+
+```bash
+./scripts/run_qwen3_benchmark.sh --input-dir="$HOME/models/qwen3-gguf" --output-dir="$HOME/results/qwen3"
+```
+
+Override logic defaults differently for think and no-think:
+
+```bash
+LOGIC_CLI_EXTRA_THINK="--temp 0.6 --top-k 40 --top-p 0.95 --repeat-penalty 1.10 --presence-penalty 0.3" \
+LOGIC_CLI_EXTRA_NO_THINK="--temp 0.1 --top-k 10 --top-p 0.8 --repeat-penalty 1.02 --presence-penalty 0.0" \
+./scripts/run_qwen3_benchmark.sh --input-dir="$HOME/models/qwen3-gguf" --bench-mode=logic
+```
+
+Run logic with a shorter timeout:
+
+```bash
+LOGIC_TIMEOUT_SEC=120 ./scripts/run_qwen3_benchmark.sh --input-dir="$HOME/models/qwen3-gguf" --bench-mode=logic
 ```
 
 ## Running in the background (Termux and other environments)
@@ -51,13 +145,13 @@ Long benchmark runs are often started in a shell session that you close. On Andr
 Run the script and tee to a log so you keep a full transcript while still watching progress:
 
 ```bash
-./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf -- -p 512 -n 128 2>&1 | tee bench.log
+./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf --bench-mode=inference -- -p 512 -n 128 2>&1 | tee bench.log
 ```
 
 Or append-only:
 
 ```bash
-./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf -- -p 512 -n 128 >>bench.log 2>&1
+./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf --bench-mode=all >>bench.log 2>&1
 ```
 
 ### Background with `nohup`
@@ -65,7 +159,7 @@ Or append-only:
 `nohup` keeps the process from receiving a hangup signal when the terminal disconnects, and typically sends output to `nohup.out` unless you redirect:
 
 ```bash
-nohup ./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf -- -p 512 -n 128 >>bench.log 2>&1 &
+nohup ./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf --bench-mode=logic >>bench.log 2>&1 &
 echo $!   # PID to remember for kill or monitoring
 ```
 
@@ -77,7 +171,7 @@ While Termux is in the foreground, acquire a wake lock so the CPU does not idle 
 
 ```bash
 termux-wake-lock
-./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf -- ...
+./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf --bench-mode=all -- ...
 termux-wake-unlock
 ```
 
