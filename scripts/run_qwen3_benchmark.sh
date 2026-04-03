@@ -45,8 +45,8 @@ LLAMA_CLI="${LLAMA_CLI:-$ROOT/build/bin/llama-cli}"
 : "${LOGIC_N_NO_THINK:=512}"
 : "${LOGIC_TIMEOUT_SEC:=300}"
 
-DEFAULT_LOGIC_CLI_EXTRA_THINK="--temp 0.5 --top-k 20 --top-p 0.9 --min-p 0 --repeat-penalty 1.10 --presence-penalty 0.3"
-DEFAULT_LOGIC_CLI_EXTRA_NO_THINK="--temp 0.2 --top-k 20 --top-p 0.9 --min-p 0 --repeat-penalty 1.05 --presence-penalty 0.0"
+DEFAULT_LOGIC_CLI_EXTRA_THINK="--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0 --repeat-penalty 1.0 --presence-penalty 1.5"
+DEFAULT_LOGIC_CLI_EXTRA_NO_THINK="--temp 0.7 --top-k 20 --top-p 0.8 --min-p 0 --repeat-penalty 1.0 --presence-penalty 1.5"
 
 if [[ -n "${LOGIC_CLI_EXTRA_THINK+x}" ]]; then
   LOGIC_CLI_EXTRA_THINK_VALUE="${LOGIC_CLI_EXTRA_THINK}"

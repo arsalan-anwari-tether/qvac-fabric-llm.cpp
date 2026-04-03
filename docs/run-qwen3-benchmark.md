@@ -1,9 +1,9 @@
 # Batch CPU vs Vulkan benchmarks (`run_qwen3_benchmark.sh`)
 
-The script [`scripts/run_qwen3_benchmark.sh`](../scripts/run_qwen3_benchmark.sh) runs Qwen3 benchmark batches over every `*.gguf` file in a directory. It supports:
+The script `[scripts/run_qwen3_benchmark.sh](../scripts/run_qwen3_benchmark.sh)` runs Qwen3 benchmark batches over every `*.gguf` file in a directory. It supports:
 
-- **Inference** via [`llama-bench`](../tools/llama-bench/README.md)
-- **Logic** prompt runs via [`llama-cli`](../tools/main/README.md)
+- **Inference** via `[llama-bench](../tools/llama-bench/README.md)`
+- **Logic** prompt runs via `[llama-cli](../tools/main/README.md)`
 - **Mode selection** via `--bench-mode={all|inference|logic}`
 
 For each model, the script compares:
@@ -15,14 +15,14 @@ The CPU mode is now a true CPU-only run because it uses `--device none`, not jus
 
 ## Output layout
 
-Under **`--output-dir`** (default: same as `--input-dir`), the script creates one subdirectory per model:
+Under `**--output-dir`** (default: same as `--input-dir`), the script creates one subdirectory per model:
 
-- **`inference/<model>/cpu.json`**
-- **`inference/<model>/vulkan.json`**
-- **`logic/<model>/cpu_think.md`**
-- **`logic/<model>/cpu_no_think.md`**
-- **`logic/<model>/vulkan_think.md`**
-- **`logic/<model>/vulkan_no_think.md`**
+- `**inference/<model>/cpu.json**`
+- `**inference/<model>/vulkan.json**`
+- `**logic/<model>/cpu_think.md**`
+- `**logic/<model>/cpu_no_think.md**`
+- `**logic/<model>/vulkan_think.md**`
+- `**logic/<model>/vulkan_no_think.md**`
 
 `<model>` is the GGUF filename without the `.gguf` suffix, for example `Qwen3-1.7B-Q4_K_M`.
 
@@ -30,8 +30,8 @@ Under **`--output-dir`** (default: same as `--input-dir`), the script creates on
 
 The script resolves the repository root from its own path and defaults to:
 
-- `build/bin/llama-bench` — override with **`LLAMA_BENCH`**
-- `build/bin/llama-cli` — override with **`LLAMA_CLI`**
+- `build/bin/llama-bench` — override with `**LLAMA_BENCH**`
+- `build/bin/llama-cli` — override with `**LLAMA_CLI**`
 
 ## Usage
 
@@ -39,13 +39,13 @@ The script resolves the repository root from its own path and defaults to:
 ./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/ggufs [--output-dir=/path/to/results] [--bench-mode=all|inference|logic] -- [extra llama-bench arguments]
 ```
 
-- **`--input-dir`** — Required. Directory containing `*.gguf` files (non-recursive; only the top level of that directory).
-- **`--output-dir`** — Optional. Directory for **`inference/`** and **`logic/`**; defaults to the same path as **`--input-dir`**.
-- **`--bench-mode`** — Select which parts to run:
+- `**--input-dir**` — Required. Directory containing `*.gguf` files (non-recursive; only the top level of that directory).
+- `**--output-dir**` — Optional. Directory for `**inference/**` and `**logic/**`; defaults to the same path as `**--input-dir**`.
+- `**--bench-mode**` — Select which parts to run:
   - `all` — run both inference and logic
   - `inference` — run only `llama-bench`
   - `logic` — run only `llama-cli`
-- **`--`** — Everything after `--` is passed through to `llama-bench` only. The script sets **`-m`**, the CPU/GPU device flags, and **`-o json`** itself so those stay consistent. In `--bench-mode=logic`, arguments after `--` are accepted but unused.
+- `**--**` — Everything after `--` is passed through to `llama-bench` only. The script sets `**-m**`, the CPU/GPU device flags, and `**-o json**` itself so those stay consistent. In `--bench-mode=logic`, arguments after `--` are accepted but unused.
 
 ## Benchmark defaults
 
@@ -151,7 +151,7 @@ Run the script and tee to a log so you keep a full transcript while still watchi
 Or append-only:
 
 ```bash
-./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf --bench-mode=all >>bench.log 2>&1
+./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf --bench-mode=all >>bench.log 2>&1 &
 ```
 
 ### Background with `nohup`
@@ -163,7 +163,7 @@ nohup ./scripts/run_qwen3_benchmark.sh --input-dir=/path/to/gguf --bench-mode=lo
 echo $!   # PID to remember for kill or monitoring
 ```
 
-You can **`tail -f bench.log`** in another session to watch status. JSON and Markdown results go under **`--output-dir`** (or **`--input-dir`** if you omitted **`--output-dir`**); the log is for messages and any errors from the shell or binary.
+You can `**tail -f bench.log**` in another session to watch status. JSON and Markdown results go under `**--output-dir**` (or `**--input-dir**` if you omitted `**--output-dir**`); the log is for messages and any errors from the shell or binary.
 
 ### Termux: keep the device awake (`termux-wake-lock`)
 
@@ -179,11 +179,12 @@ For unattended jobs, combine with `nohup` and logging; release the lock when fin
 
 ### Why this matters
 
-- **`nohup` / background `&`** — Survive closing the SSH or Termux terminal session (still subject to OS killing background apps under memory pressure).
+- `**nohup` / background `&**` — Survive closing the SSH or Termux terminal session (still subject to OS killing background apps under memory pressure).
 - **Wake lock** — Reduces the chance that the device suspends the process during long GPU/CPU runs.
 - **Log + `tail -f`** — Confirms which model is running and catches failures without opening each JSON file.
 
 ## See also
 
-- [`docs/qwen3-llama-run.md`](qwen3-llama-run.md) — Single-model Qwen3 helper for `llama-cli` / `llama-bench`
-- [`tools/llama-bench/README.md`](../tools/llama-bench/README.md) — Full `llama-bench` options and JSON output shape
+- `[docs/qwen3-llama-run.md](qwen3-llama-run.md)` — Single-model Qwen3 helper for `llama-cli` / `llama-bench`
+- `[tools/llama-bench/README.md](../tools/llama-bench/README.md)` — Full `llama-bench` options and JSON output shape
+
